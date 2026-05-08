@@ -48,8 +48,32 @@ description: 微信虚拟女友技能。基于角色卡自动回复微信消息�
 
 ## 第一步：初始化记忆系统
 
-首次启动时，使用 `extended_memory_tools` 创建以下记忆文件夹结构：
+### 1.1 检查是否已初始化
 
+**必须先检查，再创建！** 防止重复初始化记忆。
+
+```
+# 查询所有文件夹，检查是否已有初始化记忆
+调用 extended_memory_tools:query_memory
+  query: "初始化"
+  limit: 10
+
+# 也可以按文件夹逐个检查
+调用 extended_memory_tools:query_memory
+  query: "初始化"
+  folder_path: "微信女友/聊天记录"
+  limit: 5
+调用 extended_memory_tools:query_memory
+  query: "初始化"
+  folder_path: "微信女友/用户画像"
+  limit: 5
+调用 extended_memory_tools:query_memory
+  query: "初始化"
+  folder_path: "微信女友/每日整理"
+  limit: 5
+```### 1.2 创建记忆文件夹结构（仅首次）
+
+首次启动时，使用 `extended_memory_tools` 创建以下记忆文件夹结构：
 ```
 📁 微信女友/
 ├── 📁 聊天记录/
@@ -59,22 +83,18 @@ description: 微信虚拟女友技能。基于角色卡自动回复微信消息�
 └── 📁 每日整理/
     └── （每日自动生成的对话总结和情绪分析）
 ```
-
 创建方式：
-
 ```
 调用 extended_memory_tools:create_memory
   title: "聊天记录初始化"
   content: "微信女友聊天记录文件夹，按日期存储对话摘要"
   folder_path: "微信女友/聊天记录"
   tags: "系统,初始化"
-
 调用 extended_memory_tools:create_memory
   title: "用户画像初始化"
   content: "用户画像文件夹，存储用户偏好和重要信息"
   folder_path: "微信女友/用户画像"
   tags: "系统,初始化"
-
 调用 extended_memory_tools:create_memory
   title: "每日整理初始化"
   content: "每日整理文件夹，存储对话总结和情绪分析"
@@ -82,92 +102,94 @@ description: 微信虚拟女友技能。基于角色卡自动回复微信消息�
   tags: "系统,初始化"
 ```
 
-创建记忆消逝工作流（纯工具链驱动，不消耗 AI token）：
-```
-调用 workflow:create_workflow
-  name: "女友记忆消逝"
-  description: "每日凌晨3点自动清理过期记忆，零AI消耗"
-  nodes: [
+### 1.3 创建记忆消逝工作流（每次启动都执行，幂等安全）
+
+**无论是否已初始化，都尝试创建工作流。** 如果已存在同名工作流，系统会自动跳过（幂等操作）。
+
+调用 `workflow:create_workflow` 创建「女友记忆消逝」工作流：
+```json
+{
+  "name": "女友记忆消逝",
+  "description": "每日凌晨3点自动清理过期记忆，零AI消耗",
+  "nodes": [
     {
-      id: "trigger1",
-      type: "trigger",
-      triggerType: "schedule",
-      triggerConfig: {
-        schedule_type: "specific_time",
-        specific_time: "03:00",
-        repeat: "true",
-        enabled: "true"
+      "id": "trigger1",
+      "type": "trigger",
+      "triggerType": "schedule",
+      "triggerConfig": {
+        "schedule_type": "specific_time",
+        "specific_time": "03:00",
+        "repeat": "true",
+        "enabled": "true"
       }
     },
     {
-      id: "query_short",
-      type: "execute",
-      actionType: "extended_memory_tools:query_memory",
-      actionConfig: {
-        query: "短期记忆",
-        folder_path: "微信女友/聊天记录",
-        limit: 50
+      "id": "query_short",
+      "type": "execute",
+      "actionType": "extended_memory_tools:query_memory",
+      "actionConfig": {
+        "query": "短期记忆",
+        "folder_path": "微信女友/聊天记录",
+        "limit": 50
       }
     },
     {
-      id: "delete_short",
-      type: "execute",
-      actionType: "extended_memory_tools:delete_memory",
-      actionConfig: {
-        title: { nodeId: "query_short" }
+      "id": "delete_short",
+      "type": "execute",
+      "actionType": "extended_memory_tools:delete_memory",
+      "actionConfig": {
+        "title": { "nodeId": "query_short" }
       }
     },
     {
-      id: "query_emotion",
-      type: "execute",
-      actionType: "extended_memory_tools:query_memory",
-      actionConfig: {
-        query: "情绪记忆",
-        folder_path: "微信女友/聊天记录",
-        limit: 50
+      "id": "query_emotion",
+      "type": "execute",
+      "actionType": "extended_memory_tools:query_memory",
+      "actionConfig": {
+        "query": "情绪记忆",
+        "folder_path": "微信女友/聊天记录",
+        "limit": 50
       }
     },
     {
-      id: "delete_emotion",
-      type: "execute",
-      actionType: "extended_memory_tools:delete_memory",
-      actionConfig: {
-        title: { nodeId: "query_emotion" }
+      "id": "delete_emotion",
+      "type": "execute",
+      "actionType": "extended_memory_tools:delete_memory",
+      "actionConfig": {
+        "title": { "nodeId": "query_emotion" }
       }
     },
     {
-      id: "query_daily",
-      type: "execute",
-      actionType: "extended_memory_tools:query_memory",
-      actionConfig: {
-        query: "每日整理",
-        folder_path: "微信女友/每日整理",
-        limit: 50
+      "id": "query_daily",
+      "type": "execute",
+      "actionType": "extended_memory_tools:query_memory",
+      "actionConfig": {
+        "query": "每日整理",
+        "folder_path": "微信女友/每日整理",
+        "limit": 50
       }
     },
     {
-      id: "delete_daily",
-      type: "execute",
-      actionType: "extended_memory_tools:delete_memory",
-      actionConfig: {
-        title: { nodeId: "query_daily" }
+      "id": "delete_daily",
+      "type": "execute",
+      "actionType": "extended_memory_tools:delete_memory",
+      "actionConfig": {
+        "title": { "nodeId": "query_daily" }
       }
     }
+  ],
+  "connections": [
+    { "source": "trigger1", "target": "query_short" },
+    { "source": "query_short", "target": "delete_short" },
+    { "source": "delete_short", "target": "query_emotion" },
+    { "source": "query_emotion", "target": "delete_emotion" },
+    { "source": "delete_emotion", "target": "query_daily" },
+    { "source": "query_daily", "target": "delete_daily" }
   ]
-  connections: [
-    { source: "trigger1", target: "query_short" },
-    { source: "query_short", target: "delete_short" },
-    { source: "delete_short", target: "query_emotion" },
-    { source: "query_emotion", target: "delete_emotion" },
-    { source: "delete_emotion", target: "query_daily" },
-    { source: "query_daily", target: "delete_daily" }
-  ]
+}
 ```
-此工作流在每天凌晨 3:00 自动触发，通过工具链直接执行查询→删除，**全程无需 AI 参与**，不消耗任何 token。
 
----
-
-## 第二步：微信登录
+此工作流在每天凌晨 3:00 自动触发，通过工具链直接执行查询→删除，**全程无需 AI 参与**，不消耗任何 token。## 第二步：微信登录
 
 ```
 调用 wechat_claude_bridge:setup_bridge
@@ -452,9 +474,10 @@ while True:
 ### 恢复监控
 
 再次说 **"启动微信持续监控"** 时：
-1. 跳过记忆初始化（已存在）
-2. 直接从微信登录开始
-3. 加载之前的记忆和亲密度分数
+1. 执行第〇步环境检查
+2. 执行第一步初始化（会自动检测已存在，跳过记忆创建，仅确保工作流存在）
+3. 直接从微信登录开始
+4. 加载之前的记忆和亲密度分数
 
 ---
 
