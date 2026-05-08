@@ -82,6 +82,89 @@ description: 微信虚拟女友技能。基于角色卡自动回复微信消息�
   tags: "系统,初始化"
 ```
 
+创建记忆消逝工作流（纯工具链驱动，不消耗 AI token）：
+```
+调用 workflow:create_workflow
+  name: "女友记忆消逝"
+  description: "每日凌晨3点自动清理过期记忆，零AI消耗"
+  nodes: [
+    {
+      id: "trigger1",
+      type: "trigger",
+      triggerType: "schedule",
+      triggerConfig: {
+        schedule_type: "specific_time",
+        specific_time: "03:00",
+        repeat: "true",
+        enabled: "true"
+      }
+    },
+    {
+      id: "query_short",
+      type: "execute",
+      actionType: "extended_memory_tools:query_memory",
+      actionConfig: {
+        query: "短期记忆",
+        folder_path: "微信女友/聊天记录",
+        limit: 50
+      }
+    },
+    {
+      id: "delete_short",
+      type: "execute",
+      actionType: "extended_memory_tools:delete_memory",
+      actionConfig: {
+        title: { nodeId: "query_short" }
+      }
+    },
+    {
+      id: "query_emotion",
+      type: "execute",
+      actionType: "extended_memory_tools:query_memory",
+      actionConfig: {
+        query: "情绪记忆",
+        folder_path: "微信女友/聊天记录",
+        limit: 50
+      }
+    },
+    {
+      id: "delete_emotion",
+      type: "execute",
+      actionType: "extended_memory_tools:delete_memory",
+      actionConfig: {
+        title: { nodeId: "query_emotion" }
+      }
+    },
+    {
+      id: "query_daily",
+      type: "execute",
+      actionType: "extended_memory_tools:query_memory",
+      actionConfig: {
+        query: "每日整理",
+        folder_path: "微信女友/每日整理",
+        limit: 50
+      }
+    },
+    {
+      id: "delete_daily",
+      type: "execute",
+      actionType: "extended_memory_tools:delete_memory",
+      actionConfig: {
+        title: { nodeId: "query_daily" }
+      }
+    }
+  ]
+  connections: [
+    { source: "trigger1", target: "query_short" },
+    { source: "query_short", target: "delete_short" },
+    { source: "delete_short", target: "query_emotion" },
+    { source: "query_emotion", target: "delete_emotion" },
+    { source: "delete_emotion", target: "query_daily" },
+    { source: "query_daily", target: "delete_daily" }
+  ]
+```
+此工作流在每天凌晨 3:00 自动触发，通过工具链直接执行查询→删除，**全程无需 AI 参与**，不消耗任何 token。
+
 ---
 
 ## 第二步：微信登录
@@ -261,51 +344,38 @@ while True:
 | `短期记忆` | 日常聊天片段、临时话题 | 14天 |
 | `情绪记忆` | 情绪波动、心情变化 | 7天 |
 
-### 6.2 记忆消逝工作流
+### 6.2 记忆消逝工作流（纯工具链，零 token 消耗）
 
-创建一个定时工作流（每天凌晨 3:00 执行）：
+工作流在**第一步初始化时已自动创建**，无需重复操作。
 
-```
-使用 workflow:create_workflow
-  name: "女友记忆消逝"
-  description: "每日凌晨清理过期记忆，整理重要信息"
-  nodes: [
-    {
-      id: "trigger1",
-      type: "trigger",
-      triggerType: "schedule",
-      triggerConfig: {
-        schedule_type: "specific_time",
-        specific_time: "03:00",
-        repeat: "true"
-      }
-    },
-    {
-      id: "exec_cleanup",
-      type: "execute",
-      actionType: "extended_memory_tools:query_memory",
-      actionConfig: {
-        folder_path: "微信女友/聊天记录"
-      }
-    }
-  ]
-  connections: [
-    { source: "trigger1", target: "exec_cleanup" }
-  ]
-```
+**工作流原理：**
+- 触发方式：每天凌晨 3:00 定时触发（schedule）
+- 执行方式：通过 execute 节点直接调用工具链，全程不经过 AI
+- 执行链路：`触发 → 查询短期记忆 → 删除 → 查询情绪记忆 → 删除 → 查询每日整理 → 删除`
 
-**实际清理逻辑（由 AI 在触发时执行）：**
+**工作流节点说明：**
+| 节点 | 类型 | 工具 | 作用 |
+|------|------|------|------|
+| trigger1 | trigger | schedule | 每天凌晨3:00触发 |
+| query_short | execute | query_memory | 查询聊天记录中的短期记忆 |
+| delete_short | execute | delete_memory | 删除过期短期记忆 |
+| query_emotion | execute | query_memory | 查询聊天记录中的情绪记忆 |
+| delete_emotion | execute | delete_memory | 删除过期情绪记忆 |
+| query_daily | execute | query_memory | 查询过期的每日整理 |
+| delete_daily | execute | delete_memory | 删除过期每日整理 |
 
-1. 查询「微信女友/聊天记录」文件夹下所有记忆
-2. 检查每条记忆的创建时间和标签：
-   - `短期记忆` 超过 14 天 → 删除
-   - `情绪记忆` 超过 7 天 → 删除
-   - `长期记忆` 超过 90 天 → 检查是否值得升级为永久记忆
-3. 查询「微信女友/每日整理」文件夹：
-   - 超过 30 天的每日整理 → 合并关键信息到用户画像后删除
-4. 更新用户画像：
-   - 从近期聊天记录中提取新发现的用户偏好
-   - 合并到「微信女友/用户画像」文件夹
+**与旧方案的对比：**
+| 对比项 | 旧方案（AI轮询） | 新方案（工作流） |
+|--------|------------------|------------------|
+| 触发方式 | 监控循环中每次检查 | 定时任务自动触发 |
+| token消耗 | 每轮循环都消耗 | 完全不消耗 |
+| 执行时间 | 随监控循环 | 每天凌晨3:00 |
+| 可靠性 | 依赖AI在线 | 系统级调度，独立运行 |
+
+**注意事项：**
+- 此工作流清理的是「按标签分类」的记忆，标签体系见 6.1
+- `永久记忆` 和 `长期记忆` 不会被此工作流清理
+- 如果需要更精细的清理（如升级长期记忆），可手动触发补充整理
 
 ### 6.3 每日总结
 
